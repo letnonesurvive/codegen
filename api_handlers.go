@@ -4,8 +4,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"reflect"
+	"strconv"
+	"strings"
 )
 
 func StructTags() map[string]struct{} {
@@ -28,18 +32,18 @@ func ValidateTag(tag string, value reflect.Value) error {
 }
 
 func ValidateStruct(s interface{}) error {
-	value := reflect.ValueOf(s)
-	if value.Kind() != reflect.Struct {
+	srcStruct := reflect.ValueOf(s)
+	if srcStruct.Kind() != reflect.Struct {
 		return errors.New("value not a struct")
 	}
 
-	t := value.Type()
-	for i := 0; i < value.NumField(); i++ {
+	t := srcStruct.Type()
+	for i := 0; i < srcStruct.NumField(); i++ {
 		fieldType := t.Field(i)
-		fieldValue := value.Field(i)
+		fieldValue := srcStruct.Field(i)
 
 		tag := fieldType.Tag.Get("apivalidator")
-		if _, ok := StructTags()[tag]; !ok {
+		if _, ok := StructTags()[tag]; tag == "" || !ok {
 			return fmt.Errorf("invalig struct tag in field %s", tag)
 		}
 
@@ -52,10 +56,47 @@ func ValidateStruct(s interface{}) error {
 	return nil
 }
 
+func Decode(s interface{}, query string) error {
+	srcValue := reflect.ValueOf(s)
+	if srcValue.Elem().Kind() != reflect.Struct {
+		return errors.New("value not a struct")
+	}
+
+	params, _ := url.ParseQuery(query)
+
+	srcStruct := srcValue.Elem()
+	t := srcStruct.Type()
+	for i := 0; i < srcStruct.NumField(); i++ {
+		fieldType := t.Field(i)
+		tag := fieldType.Tag.Get("apivalidator") // 'paramname' pay attention
+		if _, ok := StructTags()[tag]; tag == "" || !ok {
+			return fmt.Errorf("invalig struct tag in field %s", tag)
+		}
+		fieldName := strings.ToLower(fieldType.Name)
+		if paramValue, ok := params[fieldName]; ok {
+			if srcStruct.Field(i).CanSet() {
+				switch reflect.ValueOf(fieldName).Kind() {
+				case reflect.Int:
+					intValue, _ := strconv.Atoi(paramValue[0])
+					srcStruct.Field(i).SetInt(int64(intValue))
+				case reflect.String:
+					srcStruct.Field(i).SetString(paramValue[0])
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 func (m *MyApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/user/profile" { // на сколько правильная идея делать сравнение именно так
 		var param ProfileParams
-		param.Login = r.URL.Query().Get("login")
+		if r.Method == http.MethodPost {
+			bodyBytes, _ := io.ReadAll(r.Body)
+			Decode(&param, string(bodyBytes))
+			defer r.Body.Close()
+		}
 		if err := ValidateStruct(param); err != nil {
 			http.Error(w, err.Error(), 500)
 			return
