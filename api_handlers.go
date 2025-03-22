@@ -28,11 +28,10 @@ func ValidateTag(tag string, value reflect.Value) error {
 	if (tag == "required") && (value == reflect.Zero(value.Type())) {
 		return fmt.Errorf("invalid value for required tag")
 	} else if strings.Contains(tag, "enum") {
-		values := strings.Split(tag, "|")
-		for _, v := range values {
-			if v != value.String() {
-				return fmt.Errorf("invalid enum")
-			}
+		//values := strings.Split(tag, "|")
+		str := value.String()
+		if !strings.ContainsAny(str, tag) {
+			return fmt.Errorf("invalid enum")
 		}
 	} else if strings.Contains(tag, "min") {
 		min, _ := strconv.Atoi(strings.Split(tag, "=")[1])
@@ -70,10 +69,10 @@ func ValidateStruct(s interface{}) error {
 
 	t := srcStruct.Type()
 	for i := 0; i < srcStruct.NumField(); i++ {
-		fieldType := t.Field(i)
+		field := t.Field(i)
 		fieldValue := srcStruct.Field(i)
 
-		tags := strings.Split(fieldType.Tag.Get("apivalidator"), ",") // 'paramname' pay attention
+		tags := strings.Split(field.Tag.Get("apivalidator"), ",") // 'paramname' pay attention
 		for _, tag := range tags {
 			pair := strings.Split(tag, "=")
 			if _, ok := ApiValidatorStructTags()[pair[0]]; !ok {
@@ -99,8 +98,8 @@ func Decode(s interface{}, query url.Values) error {
 	t := srcStruct.Type()
 
 	for i := 0; i < srcStruct.NumField(); i++ {
-		fieldType := t.Field(i)
-		tags := strings.Split(fieldType.Tag.Get("apivalidator"), ",") // 'paramname' pay attention
+		field := t.Field(i)
+		tags := strings.Split(field.Tag.Get("apivalidator"), ",") // 'paramname' pay attention
 		for _, tag := range tags {
 			var fieldName string
 			pair := strings.Split(tag, "=")
@@ -110,12 +109,12 @@ func Decode(s interface{}, query url.Values) error {
 			} else if _, ok := ApiValidatorStructTags()[pair[0]]; !ok {
 				return fmt.Errorf("invalig struct tag in field %s", pair[0])
 			} else {
-				fieldName = strings.ToLower(fieldType.Name)
+				fieldName = strings.ToLower(field.Name)
 			}
 
 			if paramValue, ok := query[fieldName]; ok {
 				if srcStruct.Field(i).CanSet() {
-					switch fieldType.Type.Kind() {
+					switch field.Type.Kind() {
 					case reflect.Int:
 						intValue, _ := strconv.Atoi(paramValue[0])
 						srcStruct.Field(i).SetInt(int64(intValue))
