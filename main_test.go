@@ -73,13 +73,13 @@ func TestMyApi(t *testing.T) {
 		Case{ // создаём юзера
 			Path:   ApiUserCreate,
 			Method: http.MethodPost,
-			Query:  "login=mr.moderator&age=32&status=moderator&full_name=Ivan_Ivanov",
+			Query:  "login=mr.officiant&age=32&status=moderator&full_name=Ivan_Ivanov",
 			Status: http.StatusOK,
 			Auth:   true,
 			Result: CR{
 				"error": "",
 				"response": CR{
-					"id": 43,
+					"id": 44,
 				},
 			},
 		},

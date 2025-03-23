@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,6 +10,16 @@ import (
 	"strconv"
 	"strings"
 )
+
+type ProfileResponse struct {
+	Error string `json:"error"`
+	User  User   `json:"response"`
+}
+
+type CreateResponse struct {
+	Error string  `json:"error"`
+	User  NewUser `json:"response"`
+}
 
 func ApiValidatorStructTags() map[string]struct{} {
 	return map[string]struct{}{
@@ -23,26 +32,29 @@ func ApiValidatorStructTags() map[string]struct{} {
 	}
 }
 
-func ValidateTag(tag string, value reflect.Value) error {
+func ValidateTag(tag string, value reflect.Value) ApiError {
 
 	if (tag == "required") && (value == reflect.Zero(value.Type())) {
-		return fmt.Errorf("invalid value for required tag")
+		return ApiError{HTTPStatus: http.StatusBadRequest, Err: fmt.Errorf("invalid value for required tag")}
 	} else if strings.Contains(tag, "enum") {
-		//values := strings.Split(tag, "|")
-		str := value.String()
-		if !strings.ContainsAny(str, tag) {
-			return fmt.Errorf("invalid enum")
+		tag, _ = strings.CutPrefix(tag, "enum=")
+		enumValues := strings.Split(tag, "|")
+		for _, v := range enumValues {
+			if v == value.String() {
+				return ApiError{}
+			}
 		}
+		return ApiError{HTTPStatus: http.StatusInternalServerError, Err: fmt.Errorf("invalid enum value")}
 	} else if strings.Contains(tag, "min") {
 		min, _ := strconv.Atoi(strings.Split(tag, "=")[1])
 		switch value.Type().Kind() {
 		case reflect.Int:
 			if value.Int() < int64(min) {
-				return fmt.Errorf("invalid min")
+				return ApiError{HTTPStatus: http.StatusInternalServerError, Err: fmt.Errorf("invalid min")}
 			}
 		case reflect.String:
 			if len(value.String()) < min {
-				return fmt.Errorf("invalid min")
+				return ApiError{HTTPStatus: http.StatusInternalServerError, Err: fmt.Errorf("invalid min")}
 			}
 		}
 	} else if strings.Contains(tag, "max") {
@@ -50,21 +62,23 @@ func ValidateTag(tag string, value reflect.Value) error {
 		switch value.Type().Kind() {
 		case reflect.Int:
 			if value.Int() > int64(max) {
-				return fmt.Errorf("invalid min")
+				return ApiError{HTTPStatus: http.StatusInternalServerError, Err: fmt.Errorf("invalid min")}
 			}
 		case reflect.String:
 			if len(value.String()) > max {
-				return fmt.Errorf("invalid min")
+				return ApiError{HTTPStatus: http.StatusInternalServerError, Err: fmt.Errorf("invalid min")}
 			}
 		}
+	} else if strings.Contains(tag, "default") && (value == reflect.Zero(value.Type())) {
+		return ApiError{HTTPStatus: http.StatusInternalServerError, Err: fmt.Errorf("invalid default")}
 	}
-	return nil
+	return ApiError{}
 }
 
-func ValidateStruct(s interface{}) error {
+func ValidateStruct(s interface{}) ApiError {
 	srcStruct := reflect.ValueOf(s)
 	if srcStruct.Kind() != reflect.Struct {
-		return errors.New("value not a struct")
+		return ApiError{HTTPStatus: http.StatusInternalServerError, Err: fmt.Errorf("value not a struct")}
 	}
 
 	t := srcStruct.Type()
@@ -76,59 +90,64 @@ func ValidateStruct(s interface{}) error {
 		for _, tag := range tags {
 			pair := strings.Split(tag, "=")
 			if _, ok := ApiValidatorStructTags()[pair[0]]; !ok {
-				return fmt.Errorf("invalig struct tag in field %s", tag)
+				return ApiError{HTTPStatus: http.StatusInternalServerError, Err: fmt.Errorf("invalig struct tag in field %s", tag)}
 			}
 
 			err := ValidateTag(tag, fieldValue)
-			if err != nil {
-				return fmt.Errorf("erorr with validation of tag %v with with field %s, %v", tag, fieldValue, err)
+			if err.Err != nil {
+				return ApiError{HTTPStatus: err.HTTPStatus, Err: fmt.Errorf("error with validation of tag %v with with field %s, %v", tag, fieldValue, err)}
 			}
 		}
 	}
 
-	return nil
+	return ApiError{}
 }
 
-func Decode(s interface{}, query url.Values) error {
+func Decode(s interface{}, query url.Values) ApiError {
 	srcValue := reflect.ValueOf(s)
 	if srcValue.Elem().Kind() != reflect.Struct {
-		return errors.New("value not a struct")
+		return ApiError{HTTPStatus: http.StatusInternalServerError, Err: fmt.Errorf("value not a struct")}
 	}
 	srcStruct := srcValue.Elem()
 	t := srcStruct.Type()
 
 	for i := 0; i < srcStruct.NumField(); i++ {
 		field := t.Field(i)
-		tags := strings.Split(field.Tag.Get("apivalidator"), ",") // 'paramname' pay attention
+		tags := strings.Split(field.Tag.Get("apivalidator"), ",")
 		for _, tag := range tags {
 			var fieldName string
+			var paramValue string
 			pair := strings.Split(tag, "=")
 
 			if pair[0] == "paramname" {
 				fieldName = pair[1]
 			} else if _, ok := ApiValidatorStructTags()[pair[0]]; !ok {
-				return fmt.Errorf("invalig struct tag in field %s", pair[0])
+				return ApiError{HTTPStatus: http.StatusInternalServerError, Err: fmt.Errorf("invalig struct tag in field %s", pair[0])}
 			} else {
 				fieldName = strings.ToLower(field.Name)
 			}
 
-			if paramValue, ok := query[fieldName]; ok {
+			if queryValue, ok := query[fieldName]; ok {
+				paramValue = queryValue[0]
+				if pair[0] == "default" && paramValue == "" {
+					paramValue = pair[1]
+				}
 				if srcStruct.Field(i).CanSet() {
 					switch field.Type.Kind() {
 					case reflect.Int:
-						intValue, _ := strconv.Atoi(paramValue[0])
+						intValue, _ := strconv.Atoi(paramValue)
 						srcStruct.Field(i).SetInt(int64(intValue))
 					case reflect.String:
-						srcStruct.Field(i).SetString(paramValue[0])
+						srcStruct.Field(i).SetString(paramValue)
 					}
 				}
 			} else {
-				return fmt.Errorf("not found field name %s in query", fieldName)
+				return ApiError{HTTPStatus: http.StatusInternalServerError, Err: fmt.Errorf("not found field name %s in query", fieldName)}
 			}
 		}
 	}
 
-	return nil
+	return ApiError{}
 }
 
 func (m *MyApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -143,19 +162,28 @@ func (m *MyApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Decode(&params, r.URL.Query())
 		}
 
-		if err := ValidateStruct(params); err != nil {
-			http.Error(w, err.Error(), 500)
+		if err := ValidateStruct(params); err.Err != nil {
+			http.Error(w, err.Error(), err.HTTPStatus)
 			return
 		}
 
 		user, err := m.Profile(r.Context(), params)
-		if err != nil && err.Error() == "bad user" { // should use ApiError struct
-			http.Error(w, err.Error(), 500)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		data, _ := json.Marshal(user)
+		var response = ProfileResponse{
+			Error: "",
+			User:  *user,
+		}
+
+		data, err := json.Marshal(response)
+		if err != nil {
+			http.Error(w, "error marshal json", 500)
+		}
 		w.Write(data)
+
 	} else if r.URL.Path == "/user/create" {
 		if r.Method != http.MethodPost {
 			http.Error(w, "bad method", http.StatusBadRequest)
@@ -167,8 +195,8 @@ func (m *MyApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Decode(&params, query)
 		defer r.Body.Close()
 
-		if err := ValidateStruct(params); err != nil {
-			http.Error(w, err.Error(), 500)
+		if err := ValidateStruct(params); err.Err != nil {
+			http.Error(w, err.Error(), err.HTTPStatus)
 			return
 		}
 
@@ -177,7 +205,13 @@ func (m *MyApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), 500)
 			return
 		}
-		data, _ := json.Marshal(user)
+
+		var response = CreateResponse{
+			Error: "",
+			User:  *user,
+		}
+
+		data, _ := json.Marshal(response)
 		w.Write(data)
 	}
 }
