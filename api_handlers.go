@@ -13,12 +13,12 @@ import (
 
 type ProfileResponse struct {
 	Error string `json:"error"`
-	User  User   `json:"response"`
+	User  *User  `json:"response,omitempty"`
 }
 
 type CreateResponse struct {
-	Error string  `json:"error"`
-	User  NewUser `json:"response"`
+	Error string   `json:"error"`
+	User  *NewUser `json:"response,omitempty"`
 }
 
 func ApiValidatorStructTags() map[string]struct{} {
@@ -32,10 +32,10 @@ func ApiValidatorStructTags() map[string]struct{} {
 	}
 }
 
-func ValidateTag(tag string, value reflect.Value) ApiError {
+func ValidateTag(tag string, value reflect.Value, fieldName string) ApiError {
 
 	if (tag == "required") && (value == reflect.Zero(value.Type())) {
-		return ApiError{HTTPStatus: http.StatusBadRequest, Err: fmt.Errorf("invalid value for required tag")}
+		return ApiError{HTTPStatus: http.StatusBadRequest, Err: fmt.Errorf("%v must be not empty", fieldName)}
 	} else if strings.Contains(tag, "enum") {
 		tag, _ = strings.CutPrefix(tag, "enum=")
 		enumValues := strings.Split(tag, "|")
@@ -86,16 +86,16 @@ func ValidateStruct(s interface{}) ApiError {
 		field := t.Field(i)
 		fieldValue := srcStruct.Field(i)
 
-		tags := strings.Split(field.Tag.Get("apivalidator"), ",") // 'paramname' pay attention
+		tags := strings.Split(field.Tag.Get("apivalidator"), ",")
 		for _, tag := range tags {
 			pair := strings.Split(tag, "=")
 			if _, ok := ApiValidatorStructTags()[pair[0]]; !ok {
 				return ApiError{HTTPStatus: http.StatusInternalServerError, Err: fmt.Errorf("invalig struct tag in field %s", tag)}
 			}
 
-			err := ValidateTag(tag, fieldValue)
+			err := ValidateTag(tag, fieldValue, strings.ToLower(field.Name))
 			if err.Err != nil {
-				return ApiError{HTTPStatus: err.HTTPStatus, Err: fmt.Errorf("error with validation of tag %v with with field %s, %v", tag, fieldValue, err)}
+				return ApiError{HTTPStatus: err.HTTPStatus, Err: err}
 			}
 		}
 	}
@@ -127,6 +127,7 @@ func Decode(s interface{}, query url.Values) ApiError {
 				fieldName = strings.ToLower(field.Name)
 			}
 
+			//need to reimplement Validation. Call ValidateTag here? Do not define separate ValidateStruct
 			if queryValue, ok := query[fieldName]; ok {
 				paramValue = queryValue[0]
 				if pair[0] == "default" && paramValue == "" {
@@ -142,6 +143,7 @@ func Decode(s interface{}, query url.Values) ApiError {
 					}
 				}
 			} else {
+				//case 4 fail
 				return ApiError{HTTPStatus: http.StatusInternalServerError, Err: fmt.Errorf("not found field name %s in query", fieldName)}
 			}
 		}
@@ -151,7 +153,8 @@ func Decode(s interface{}, query url.Values) ApiError {
 }
 
 func (m *MyApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path == "/user/profile" { // насколько правильная идея делать сравнение именно так
+	w.Header().Set("Content-Type", "application/json")
+	if r.URL.Path == "/user/profile" { // насколько правильная идея делать сравнение именно так?
 		var params ProfileParams
 		if r.Method == http.MethodPost {
 			bodyBytes, _ := io.ReadAll(r.Body)
@@ -162,28 +165,34 @@ func (m *MyApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Decode(&params, r.URL.Query())
 		}
 
+		var response ProfileResponse
+
 		if err := ValidateStruct(params); err.Err != nil {
-			http.Error(w, err.Error(), err.HTTPStatus)
+			w.WriteHeader(err.HTTPStatus)
+			response.Error = err.Error()
+			data, _ := json.Marshal(response)
+			w.Write(data)
 			return
 		}
 
 		user, err := m.Profile(r.Context(), params)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			w.WriteHeader(http.StatusInternalServerError)
+			response.Error = err.Error()
+			data, _ := json.Marshal(response)
+			w.Write(data)
 			return
 		}
 
-		var response = ProfileResponse{
-			Error: "",
-			User:  *user,
-		}
-
+		response.User = user
 		data, err := json.Marshal(response)
 		if err != nil {
-			http.Error(w, "error marshal json", 500)
+			w.WriteHeader(http.StatusInternalServerError)
+			response.Error = err.Error()
+			data, _ := json.Marshal(response)
+			w.Write(data)
 		}
 		w.Write(data)
-
 	} else if r.URL.Path == "/user/create" {
 		if r.Method != http.MethodPost {
 			http.Error(w, "bad method", http.StatusBadRequest)
@@ -208,7 +217,7 @@ func (m *MyApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		var response = CreateResponse{
 			Error: "",
-			User:  *user,
+			User:  user,
 		}
 
 		data, _ := json.Marshal(response)

@@ -102,7 +102,7 @@ func TestMyApi(t *testing.T) {
 			Query:  "",
 			Status: http.StatusBadRequest,
 			Result: CR{
-				"error": "login must me not empty",
+				"error": "login must be not empty",
 			},
 		},
 		Case{ // получили ошибку общего назначения - ваш код сам подставил 500
@@ -321,6 +321,10 @@ func runTests(t *testing.T, ts *httptest.Server, cases []Case) {
 			req.Header.Add("X-Auth", "100500")
 		}
 
+		if idx == 4 {
+			fmt.Println(idx)
+		}
+
 		resp, err := client.Do(req)
 		if err != nil {
 			t.Errorf("[%s] request error: %v", caseName, err)
@@ -329,7 +333,7 @@ func runTests(t *testing.T, ts *httptest.Server, cases []Case) {
 		defer resp.Body.Close()
 		body, err := io.ReadAll(resp.Body)
 
-		// fmt.Printf("[%s] body: %s\n", caseName, string(body))
+		fmt.Printf("[%s] body: %s\n", caseName, string(body))
 
 		if resp.StatusCode != item.Status {
 			t.Errorf("[%s] expected http status %v, got %v", caseName, item.Status, resp.StatusCode)
