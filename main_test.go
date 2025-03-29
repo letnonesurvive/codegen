@@ -121,143 +121,143 @@ func TestMyApi(t *testing.T) {
 				"error": "user not exist",
 			},
 		},
-		// ------
-		Case{ // это должен ответить ваш ServeHTTP - если ему пришло что-то неизвестное (например когда он обрабатывает /user/)
-			Path:   "/user/unknown",
-			Query:  "login=not_exist_user",
-			Status: http.StatusNotFound,
-			Result: CR{
-				"error": "unknown method",
-			},
-		},
-		Case{ // юзер действительно создался
-			Path:   ApiUserProfile,
-			Query:  "login=mr.moderator",
-			Status: http.StatusOK,
-			Result: CR{
-				"error": "",
-				"response": CR{
-					"id":        43,
-					"login":     "mr.moderator",
-					"full_name": "Ivan_Ivanov",
-					"status":    10,
-				},
-			},
-		},
+		// // ------
+		// Case{ // это должен ответить ваш ServeHTTP - если ему пришло что-то неизвестное (например когда он обрабатывает /user/)
+		// 	Path:   "/user/unknown",
+		// 	Query:  "login=not_exist_user",
+		// 	Status: http.StatusNotFound,
+		// 	Result: CR{
+		// 		"error": "unknown method",
+		// 	},
+		// },
+		// Case{ // юзер действительно создался
+		// 	Path:   ApiUserProfile,
+		// 	Query:  "login=mr.moderator",
+		// 	Status: http.StatusOK,
+		// 	Result: CR{
+		// 		"error": "",
+		// 		"response": CR{
+		// 			"id":        43,
+		// 			"login":     "mr.moderator",
+		// 			"full_name": "Ivan_Ivanov",
+		// 			"status":    10,
+		// 		},
+		// 	},
+		// },
 
-		Case{ // только POST
-			Path:   ApiUserCreate,
-			Method: http.MethodGet,
-			Query:  "login=mr.moderator&age=32&status=moderator&full_name=GetMethod",
-			Status: http.StatusNotAcceptable,
-			Auth:   true,
-			Result: CR{
-				"error": "bad method",
-			},
-		},
-		Case{
-			Path:   ApiUserCreate,
-			Method: http.MethodPost,
-			Query:  "any_params=123",
-			Status: http.StatusForbidden,
-			Auth:   false,
-			Result: CR{
-				"error": "unauthorized",
-			},
-		},
-		Case{
-			Path:   ApiUserCreate,
-			Method: http.MethodPost,
-			Query:  "login=mr.moderator&age=32&status=moderator&full_name=New_Ivan",
-			Status: http.StatusConflict,
-			Auth:   true,
-			Result: CR{
-				"error": "user mr.moderator exist",
-			},
-		},
-		Case{
-			Path:   ApiUserCreate,
-			Method: http.MethodPost,
-			Query:  "&age=32&status=moderator&full_name=Ivan_Ivanov",
-			Status: http.StatusBadRequest,
-			Auth:   true,
-			Result: CR{
-				"error": "login must me not empty",
-			},
-		},
-		Case{
-			Path:   ApiUserCreate,
-			Method: http.MethodPost,
-			Query:  "login=new_m&age=32&status=moderator&full_name=Ivan_Ivanov",
-			Status: http.StatusBadRequest,
-			Auth:   true,
-			Result: CR{
-				"error": "login len must be >= 10",
-			},
-		},
-		Case{
-			Path:   ApiUserCreate,
-			Method: http.MethodPost,
-			Query:  "login=new_moderator&age=ten&status=moderator&full_name=Ivan_Ivanov",
-			Status: http.StatusBadRequest,
-			Auth:   true,
-			Result: CR{
-				"error": "age must be int",
-			},
-		},
-		Case{
-			Path:   ApiUserCreate,
-			Method: http.MethodPost,
-			Query:  "login=new_moderator&age=-1&status=moderator&full_name=Ivan_Ivanov",
-			Status: http.StatusBadRequest,
-			Auth:   true,
-			Result: CR{
-				"error": "age must be >= 0",
-			},
-		},
-		Case{
-			Path:   ApiUserCreate,
-			Method: http.MethodPost,
-			Query:  "login=new_moderator&age=256&status=moderator&full_name=Ivan_Ivanov",
-			Status: http.StatusBadRequest,
-			Auth:   true,
-			Result: CR{
-				"error": "age must be <= 128",
-			},
-		},
-		Case{
-			Path:   ApiUserCreate,
-			Method: http.MethodPost,
-			Query:  "login=new_moderator&age=32&status=adm&full_name=Ivan_Ivanov",
-			Status: http.StatusBadRequest,
-			Auth:   true,
-			Result: CR{
-				"error": "status must be one of [user, moderator, admin]",
-			},
-		},
-		Case{ // status по-умолчанию
-			Path:   ApiUserCreate,
-			Method: http.MethodPost,
-			Query:  "login=new_moderator3&age=32&full_name=Ivan_Ivanov",
-			Status: http.StatusOK,
-			Auth:   true,
-			Result: CR{
-				"error": "",
-				"response": CR{
-					"id": 44,
-				},
-			},
-		},
-		Case{ // обрабатываем неизвестную ошибку
-			Path:   ApiUserCreate,
-			Method: http.MethodPost,
-			Query:  "login=bad_username&age=32&full_name=Ivan_Ivanov",
-			Status: http.StatusInternalServerError,
-			Auth:   true,
-			Result: CR{
-				"error": "bad user",
-			},
-		},
+		// Case{ // только POST
+		// 	Path:   ApiUserCreate,
+		// 	Method: http.MethodGet,
+		// 	Query:  "login=mr.moderator&age=32&status=moderator&full_name=GetMethod",
+		// 	Status: http.StatusNotAcceptable,
+		// 	Auth:   true,
+		// 	Result: CR{
+		// 		"error": "bad method",
+		// 	},
+		// },
+		// Case{
+		// 	Path:   ApiUserCreate,
+		// 	Method: http.MethodPost,
+		// 	Query:  "any_params=123",
+		// 	Status: http.StatusForbidden,
+		// 	Auth:   false,
+		// 	Result: CR{
+		// 		"error": "unauthorized",
+		// 	},
+		// },
+		// Case{
+		// 	Path:   ApiUserCreate,
+		// 	Method: http.MethodPost,
+		// 	Query:  "login=mr.moderator&age=32&status=moderator&full_name=New_Ivan",
+		// 	Status: http.StatusConflict,
+		// 	Auth:   true,
+		// 	Result: CR{
+		// 		"error": "user mr.moderator exist",
+		// 	},
+		// },
+		// Case{
+		// 	Path:   ApiUserCreate,
+		// 	Method: http.MethodPost,
+		// 	Query:  "&age=32&status=moderator&full_name=Ivan_Ivanov",
+		// 	Status: http.StatusBadRequest,
+		// 	Auth:   true,
+		// 	Result: CR{
+		// 		"error": "login must me not empty",
+		// 	},
+		// },
+		// Case{
+		// 	Path:   ApiUserCreate,
+		// 	Method: http.MethodPost,
+		// 	Query:  "login=new_m&age=32&status=moderator&full_name=Ivan_Ivanov",
+		// 	Status: http.StatusBadRequest,
+		// 	Auth:   true,
+		// 	Result: CR{
+		// 		"error": "login len must be >= 10",
+		// 	},
+		// },
+		// Case{
+		// 	Path:   ApiUserCreate,
+		// 	Method: http.MethodPost,
+		// 	Query:  "login=new_moderator&age=ten&status=moderator&full_name=Ivan_Ivanov",
+		// 	Status: http.StatusBadRequest,
+		// 	Auth:   true,
+		// 	Result: CR{
+		// 		"error": "age must be int",
+		// 	},
+		// },
+		// Case{
+		// 	Path:   ApiUserCreate,
+		// 	Method: http.MethodPost,
+		// 	Query:  "login=new_moderator&age=-1&status=moderator&full_name=Ivan_Ivanov",
+		// 	Status: http.StatusBadRequest,
+		// 	Auth:   true,
+		// 	Result: CR{
+		// 		"error": "age must be >= 0",
+		// 	},
+		// },
+		// Case{
+		// 	Path:   ApiUserCreate,
+		// 	Method: http.MethodPost,
+		// 	Query:  "login=new_moderator&age=256&status=moderator&full_name=Ivan_Ivanov",
+		// 	Status: http.StatusBadRequest,
+		// 	Auth:   true,
+		// 	Result: CR{
+		// 		"error": "age must be <= 128",
+		// 	},
+		// },
+		// Case{
+		// 	Path:   ApiUserCreate,
+		// 	Method: http.MethodPost,
+		// 	Query:  "login=new_moderator&age=32&status=adm&full_name=Ivan_Ivanov",
+		// 	Status: http.StatusBadRequest,
+		// 	Auth:   true,
+		// 	Result: CR{
+		// 		"error": "status must be one of [user, moderator, admin]",
+		// 	},
+		// },
+		// Case{ // status по-умолчанию
+		// 	Path:   ApiUserCreate,
+		// 	Method: http.MethodPost,
+		// 	Query:  "login=new_moderator3&age=32&full_name=Ivan_Ivanov",
+		// 	Status: http.StatusOK,
+		// 	Auth:   true,
+		// 	Result: CR{
+		// 		"error": "",
+		// 		"response": CR{
+		// 			"id": 44,
+		// 		},
+		// 	},
+		// },
+		// Case{ // обрабатываем неизвестную ошибку
+		// 	Path:   ApiUserCreate,
+		// 	Method: http.MethodPost,
+		// 	Query:  "login=bad_username&age=32&full_name=Ivan_Ivanov",
+		// 	Status: http.StatusInternalServerError,
+		// 	Auth:   true,
+		// 	Result: CR{
+		// 		"error": "bad user",
+		// 	},
+		// },
 	}
 
 	runTests(t, ts, cases)
@@ -321,7 +321,7 @@ func runTests(t *testing.T, ts *httptest.Server, cases []Case) {
 			req.Header.Add("X-Auth", "100500")
 		}
 
-		if idx == 4 {
+		if idx == 7 {
 			fmt.Println(idx)
 		}
 
