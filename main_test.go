@@ -56,30 +56,17 @@ func TestMyApi(t *testing.T) {
 				},
 			},
 		},
+		// ------
 		Case{ // создаём юзера
 			Path:   ApiUserCreate,
 			Method: http.MethodPost,
 			Query:  "login=mr.moderator&age=32&status=moderator&full_name=Ivan_Ivanov",
 			Status: http.StatusOK,
-			Auth:   false,
-			Result: CR{
-				"error": "",
-				"response": CR{
-					"id": 43,
-				},
-			},
-		},
-		// ------
-		Case{ // создаём юзера
-			Path:   ApiUserCreate,
-			Method: http.MethodPost,
-			Query:  "login=mr.officiant&age=32&status=moderator&full_name=Ivan_Ivanov",
-			Status: http.StatusOK,
 			Auth:   true,
 			Result: CR{
 				"error": "",
 				"response": CR{
-					"id": 44,
+					"id": 43,
 				},
 			},
 		},
@@ -122,69 +109,69 @@ func TestMyApi(t *testing.T) {
 			},
 		},
 		// // ------
-		// Case{ // это должен ответить ваш ServeHTTP - если ему пришло что-то неизвестное (например когда он обрабатывает /user/)
-		// 	Path:   "/user/unknown",
-		// 	Query:  "login=not_exist_user",
-		// 	Status: http.StatusNotFound,
-		// 	Result: CR{
-		// 		"error": "unknown method",
-		// 	},
-		// },
-		// Case{ // юзер действительно создался
-		// 	Path:   ApiUserProfile,
-		// 	Query:  "login=mr.moderator",
-		// 	Status: http.StatusOK,
-		// 	Result: CR{
-		// 		"error": "",
-		// 		"response": CR{
-		// 			"id":        43,
-		// 			"login":     "mr.moderator",
-		// 			"full_name": "Ivan_Ivanov",
-		// 			"status":    10,
-		// 		},
-		// 	},
-		// },
+		Case{ // это должен ответить ваш ServeHTTP - если ему пришло что-то неизвестное (например когда он обрабатывает /user/)
+			Path:   "/user/unknown",
+			Query:  "login=not_exist_user",
+			Status: http.StatusNotFound,
+			Result: CR{
+				"error": "unknown method",
+			},
+		},
+		Case{ // юзер действительно создался
+			Path:   ApiUserProfile,
+			Query:  "login=mr.moderator",
+			Status: http.StatusOK,
+			Result: CR{
+				"error": "",
+				"response": CR{
+					"id":        43,
+					"login":     "mr.moderator",
+					"full_name": "Ivan_Ivanov",
+					"status":    10,
+				},
+			},
+		},
 
-		// Case{ // только POST
-		// 	Path:   ApiUserCreate,
-		// 	Method: http.MethodGet,
-		// 	Query:  "login=mr.moderator&age=32&status=moderator&full_name=GetMethod",
-		// 	Status: http.StatusNotAcceptable,
-		// 	Auth:   true,
-		// 	Result: CR{
-		// 		"error": "bad method",
-		// 	},
-		// },
-		// Case{
-		// 	Path:   ApiUserCreate,
-		// 	Method: http.MethodPost,
-		// 	Query:  "any_params=123",
-		// 	Status: http.StatusForbidden,
-		// 	Auth:   false,
-		// 	Result: CR{
-		// 		"error": "unauthorized",
-		// 	},
-		// },
-		// Case{
-		// 	Path:   ApiUserCreate,
-		// 	Method: http.MethodPost,
-		// 	Query:  "login=mr.moderator&age=32&status=moderator&full_name=New_Ivan",
-		// 	Status: http.StatusConflict,
-		// 	Auth:   true,
-		// 	Result: CR{
-		// 		"error": "user mr.moderator exist",
-		// 	},
-		// },
-		// Case{
-		// 	Path:   ApiUserCreate,
-		// 	Method: http.MethodPost,
-		// 	Query:  "&age=32&status=moderator&full_name=Ivan_Ivanov",
-		// 	Status: http.StatusBadRequest,
-		// 	Auth:   true,
-		// 	Result: CR{
-		// 		"error": "login must me not empty",
-		// 	},
-		// },
+		Case{ // только POST
+			Path:   ApiUserCreate,
+			Method: http.MethodGet,
+			Query:  "login=mr.moderator&age=32&status=moderator&full_name=GetMethod",
+			Status: http.StatusNotAcceptable,
+			Auth:   true,
+			Result: CR{
+				"error": "bad method",
+			},
+		},
+		Case{
+			Path:   ApiUserCreate,
+			Method: http.MethodPost,
+			Query:  "any_params=123",
+			Status: http.StatusForbidden,
+			Auth:   false,
+			Result: CR{
+				"error": "unauthorized",
+			},
+		},
+		Case{
+			Path:   ApiUserCreate,
+			Method: http.MethodPost,
+			Query:  "login=mr.moderator&age=32&status=moderator&full_name=New_Ivan",
+			Status: http.StatusConflict,
+			Auth:   true,
+			Result: CR{
+				"error": "user mr.moderator exist",
+			},
+		},
+		Case{
+			Path:   ApiUserCreate,
+			Method: http.MethodPost,
+			Query:  "&age=32&status=moderator&full_name=Ivan_Ivanov",
+			Status: http.StatusBadRequest,
+			Auth:   true,
+			Result: CR{
+				"error": "login must be not empty",
+			},
+		},
 		// Case{
 		// 	Path:   ApiUserCreate,
 		// 	Method: http.MethodPost,
