@@ -29,7 +29,16 @@ func main() {
 	}
 
 	fmt.Fprintln(out, "package "+node.Name.Name)
-	fmt.Fprintln(out, "import "+"\"net/http\"")
+	fmt.Fprintln(out, "import (")
+	fmt.Fprintln(out, "\t\"encoding/json\"")
+	fmt.Fprintln(out, "\t\"fmt\"")
+	fmt.Fprintln(out, "\t\"io\"")
+	fmt.Fprintln(out, "\t\"net/http\"")
+	fmt.Fprintln(out, "\t\"net/url\"")
+	fmt.Fprintln(out, "\t\"reflect\"")
+	fmt.Fprintln(out, "\t\"strconv\"")
+	fmt.Fprintln(out, "\t\"strings\"")
+	fmt.Fprintln(out, ")")
 
 	for _, decl := range node.Decls {
 		g, ok := decl.(*ast.GenDecl)
