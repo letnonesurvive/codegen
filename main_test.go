@@ -17,7 +17,7 @@ func CheckoutDummy(w http.ResponseWriter, r *http.Request) {
 }
 
 var (
-	client = &http.Client{Timeout: time.Second}
+	client = &http.Client{Timeout: time.Hour}
 )
 
 type Case struct {
@@ -39,7 +39,6 @@ type CR map[string]interface{}
 
 func TestMyApi(t *testing.T) {
 	ts := httptest.NewServer(NewMyApi())
-
 	cases := []Case{
 		Case{ // успешный запрос - POST
 			Path:   ApiUserProfile,
@@ -172,79 +171,79 @@ func TestMyApi(t *testing.T) {
 				"error": "login must be not empty",
 			},
 		},
-		// Case{
-		// 	Path:   ApiUserCreate,
-		// 	Method: http.MethodPost,
-		// 	Query:  "login=new_m&age=32&status=moderator&full_name=Ivan_Ivanov",
-		// 	Status: http.StatusBadRequest,
-		// 	Auth:   true,
-		// 	Result: CR{
-		// 		"error": "login len must be >= 10",
-		// 	},
-		// },
-		// Case{
-		// 	Path:   ApiUserCreate,
-		// 	Method: http.MethodPost,
-		// 	Query:  "login=new_moderator&age=ten&status=moderator&full_name=Ivan_Ivanov",
-		// 	Status: http.StatusBadRequest,
-		// 	Auth:   true,
-		// 	Result: CR{
-		// 		"error": "age must be int",
-		// 	},
-		// },
-		// Case{
-		// 	Path:   ApiUserCreate,
-		// 	Method: http.MethodPost,
-		// 	Query:  "login=new_moderator&age=-1&status=moderator&full_name=Ivan_Ivanov",
-		// 	Status: http.StatusBadRequest,
-		// 	Auth:   true,
-		// 	Result: CR{
-		// 		"error": "age must be >= 0",
-		// 	},
-		// },
-		// Case{
-		// 	Path:   ApiUserCreate,
-		// 	Method: http.MethodPost,
-		// 	Query:  "login=new_moderator&age=256&status=moderator&full_name=Ivan_Ivanov",
-		// 	Status: http.StatusBadRequest,
-		// 	Auth:   true,
-		// 	Result: CR{
-		// 		"error": "age must be <= 128",
-		// 	},
-		// },
-		// Case{
-		// 	Path:   ApiUserCreate,
-		// 	Method: http.MethodPost,
-		// 	Query:  "login=new_moderator&age=32&status=adm&full_name=Ivan_Ivanov",
-		// 	Status: http.StatusBadRequest,
-		// 	Auth:   true,
-		// 	Result: CR{
-		// 		"error": "status must be one of [user, moderator, admin]",
-		// 	},
-		// },
-		// Case{ // status по-умолчанию
-		// 	Path:   ApiUserCreate,
-		// 	Method: http.MethodPost,
-		// 	Query:  "login=new_moderator3&age=32&full_name=Ivan_Ivanov",
-		// 	Status: http.StatusOK,
-		// 	Auth:   true,
-		// 	Result: CR{
-		// 		"error": "",
-		// 		"response": CR{
-		// 			"id": 44,
-		// 		},
-		// 	},
-		// },
-		// Case{ // обрабатываем неизвестную ошибку
-		// 	Path:   ApiUserCreate,
-		// 	Method: http.MethodPost,
-		// 	Query:  "login=bad_username&age=32&full_name=Ivan_Ivanov",
-		// 	Status: http.StatusInternalServerError,
-		// 	Auth:   true,
-		// 	Result: CR{
-		// 		"error": "bad user",
-		// 	},
-		// },
+		Case{
+			Path:   ApiUserCreate,
+			Method: http.MethodPost,
+			Query:  "login=new_m&age=32&status=moderator&full_name=Ivan_Ivanov",
+			Status: http.StatusBadRequest,
+			Auth:   true,
+			Result: CR{
+				"error": "login len must be >= 10",
+			},
+		},
+		Case{
+			Path:   ApiUserCreate,
+			Method: http.MethodPost,
+			Query:  "login=new_moderator&age=ten&status=moderator&full_name=Ivan_Ivanov",
+			Status: http.StatusBadRequest,
+			Auth:   true,
+			Result: CR{
+				"error": "age must be int",
+			},
+		},
+		Case{
+			Path:   ApiUserCreate,
+			Method: http.MethodPost,
+			Query:  "login=new_moderator&age=-1&status=moderator&full_name=Ivan_Ivanov",
+			Status: http.StatusBadRequest,
+			Auth:   true,
+			Result: CR{
+				"error": "age must be >= 0",
+			},
+		},
+		Case{
+			Path:   ApiUserCreate,
+			Method: http.MethodPost,
+			Query:  "login=new_moderator&age=256&status=moderator&full_name=Ivan_Ivanov",
+			Status: http.StatusBadRequest,
+			Auth:   true,
+			Result: CR{
+				"error": "age must be <= 128",
+			},
+		},
+		Case{
+			Path:   ApiUserCreate,
+			Method: http.MethodPost,
+			Query:  "login=new_moderator&age=32&status=adm&full_name=Ivan_Ivanov",
+			Status: http.StatusBadRequest,
+			Auth:   true,
+			Result: CR{
+				"error": "status must be one of [user, moderator, admin]",
+			},
+		},
+		Case{ // status по-умолчанию
+			Path:   ApiUserCreate,
+			Method: http.MethodPost,
+			Query:  "login=new_moderator3&age=32&full_name=Ivan_Ivanov",
+			Status: http.StatusOK,
+			Auth:   true,
+			Result: CR{
+				"error": "",
+				"response": CR{
+					"id": 44,
+				},
+			},
+		},
+		Case{ // обрабатываем неизвестную ошибку
+			Path:   ApiUserCreate,
+			Method: http.MethodPost,
+			Query:  "login=bad_username&age=32&full_name=Ivan_Ivanov",
+			Status: http.StatusInternalServerError,
+			Auth:   true,
+			Result: CR{
+				"error": "bad user",
+			},
+		},
 	}
 
 	runTests(t, ts, cases)
