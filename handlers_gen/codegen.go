@@ -38,9 +38,9 @@ type ApiGen struct {
 // 	return res
 // }
 
-func findAllMethods(node *ast.File) map[string][]ApiGen {
+func findAllMethods(tree *ast.File) map[string][]ApiGen {
 	res := make(map[string][]ApiGen)
-	for _, decl := range node.Decls {
+	for _, decl := range tree.Decls {
 		funcDecl, ok := decl.(*ast.FuncDecl)
 		if !ok || funcDecl.Recv == nil {
 			continue
@@ -78,6 +78,37 @@ func findAllMethods(node *ast.File) map[string][]ApiGen {
 	return res
 }
 
+func generateHTTPHandlers(methods map[string][]ApiGen, out *os.File) map[string]string {
+	res := make(map[string]string)
+	for structName, apis := range methods {
+		for _, api := range apis {
+			//add camel style
+			funcNames := strings.Split(api.Url, "/")
+			funcName := strings.Join(funcNames, "")
+			fmt.Fprintf(out, "func (s %v) handle%v (w http.ResponseWriter, r *http.Request) { \n\n}", structName, funcName)
+			fmt.Fprintln(out)
+			res[api.Url] = fmt.Sprintf("handle%v", funcName)
+		}
+	}
+	return res
+}
+
+func generateServeHTTP(methods map[string][]ApiGen, handlers map[string]string, out *os.File) {
+	for structName, apis := range methods {
+		structArgumentName := "s"
+		// это нужно написать шаблонами? см codegen.go
+		fmt.Fprintf(out, "func (%v *%v) ServeHTTP(w http.ResponseWriter, r *http.Request) {\n\n", structArgumentName, structName)
+		fmt.Fprintln(out, "\tw.Header().Set(\"Content-Type\", \"application/json\")")
+		fmt.Fprintln(out, "\tswitch r.URL.Path {")
+		for _, api := range apis {
+			fmt.Fprintf(out, "\tcase \"%v\":\n", api.Url)
+			fmt.Fprintf(out, "\t\t%v.%v(w, r) \n", structArgumentName, handlers[api.Url])
+		}
+		fmt.Fprintln(out, "\tdefault:\n\t\tWriteError(w, ApiError{HTTPStatus: http.StatusNotFound, Err: fmt.Errorf(\"unknown method\")})")
+		fmt.Fprintln(out, "\t}\n}")
+	}
+}
+
 func main() {
 
 	if len(os.Args) < 3 {
@@ -86,7 +117,8 @@ func main() {
 	}
 
 	fset := token.NewFileSet()
-	node, err := parser.ParseFile(fset, os.Args[1], nil, parser.ParseComments)
+	tree, err := parser.ParseFile(fset, os.Args[1], nil, parser.ParseComments)
+	//ast.Fprint(os.Stdout, fset, tree, nil)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -98,7 +130,7 @@ func main() {
 		return
 	}
 
-	fmt.Fprintln(out, "package "+node.Name.Name)
+	fmt.Fprintln(out, "package "+tree.Name.Name)
 	fmt.Fprintln(out, "import (")
 	fmt.Fprintln(out, "\t\"encoding/json\"")
 	fmt.Fprintln(out, "\t\"fmt\"")
@@ -111,17 +143,26 @@ func main() {
 	fmt.Fprintln(out, ")")
 
 	//structs := findAllStructs(node)
-	methods := findAllMethods(node)
+	methods := findAllMethods(tree)
 
-	for structName, apis := range methods {
-		for _, api := range apis {
-			//add camel style
-			funcNames := strings.Split(api.Url, "/")
-			funcName := strings.Join(funcNames, "")
-			fmt.Fprintf(out, "func (s %v) handle%v (w http.ResponseWriter, r *http.Request) { \n\n}", structName, funcName)
-			fmt.Fprintln(out)
-		}
+	//jsonErrorTag := strconv.Quote(`json:"error"`)
+	fmt.Fprintf(out, "type ErrorResponse struct {\n \tError string `json:\"error\"` \n}\n")
+
+	//help method to write error to body
+	fmt.Fprintln(out, `func WriteError(w http.ResponseWriter, err error) {
+	var response ErrorResponse
+	if apiError, ok := err.(ApiError); ok {
+		w.WriteHeader(apiError.HTTPStatus)
+	} else {
+		w.WriteHeader(http.StatusInternalServerError)
 	}
+	response.Error = err.Error()
+	data, _ := json.Marshal(response)
+	w.Write(data)
+}`)
+
+	handlers := generateHTTPHandlers(methods, out)
+	generateServeHTTP(methods, handlers, out)
 
 	fmt.Fprintln(out) // empty string
 
