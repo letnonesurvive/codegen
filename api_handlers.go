@@ -25,60 +25,79 @@ func WriteError(w http.ResponseWriter, err error) {
 }
 func (s MyApi) handleprofile (w http.ResponseWriter, r *http.Request) { 
 
+	var params ProfileParams
 	var validator ApiValidator
-	var profile ProfileParams
-	bodyBytes, _ := io.ReadAll(r.Body)
-	defer r.Body.Close()
-	query, _ := url.ParseQuery(string(bodyBytes))
-	err := validator.Decode(&profile, query)
+	var query url.Values
+	if r.Method == http.MethodPost {
+		bodyBytes, _ := io.ReadAll(r.Body)
+		defer r.Body.Close()
+		query, _ = url.ParseQuery(string(bodyBytes))
+	} else if r.Method == http.MethodGet {
+		query = r.URL.Query()
+	}
+	err := validator.Decode(&params, query)
 	if err != nil {
 		WriteError(w, err)
 		return
 	}
-	
+
 }
 func (s MyApi) handlecreate (w http.ResponseWriter, r *http.Request) { 
+
+	var params CreateParams
+	var validator ApiValidator
+	var query url.Values
 	if r.Method != http.MethodPost {
 		WriteError(w, ApiError{HTTPStatus: http.StatusNotAcceptable, Err: fmt.Errorf("bad method")})
 		return
 	}
-	var validator ApiValidator
-	var create CreateParams
+	auth, ok := r.Header["X-Auth"]
+	if !ok || auth[0] != "100500" {
+		WriteError(w, ApiError{HTTPStatus: http.StatusForbidden, Err: fmt.Errorf("unauthorized")})
+		return
+	}
 	bodyBytes, _ := io.ReadAll(r.Body)
 	defer r.Body.Close()
-	query, _ := url.ParseQuery(string(bodyBytes))
-	err := validator.Decode(&create, query)
+	query, _ = url.ParseQuery(string(bodyBytes))
+	err := validator.Decode(&params, query)
 	if err != nil {
 		WriteError(w, err)
 		return
 	}
-	
+
 }
 func (s OtherApi) handlecreate (w http.ResponseWriter, r *http.Request) { 
+
+	var params CreateParams
+	var validator ApiValidator
+	var query url.Values
 	if r.Method != http.MethodPost {
 		WriteError(w, ApiError{HTTPStatus: http.StatusNotAcceptable, Err: fmt.Errorf("bad method")})
 		return
 	}
-	var validator ApiValidator
-	var create CreateParams
+	auth, ok := r.Header["X-Auth"]
+	if !ok || auth[0] != "100500" {
+		WriteError(w, ApiError{HTTPStatus: http.StatusForbidden, Err: fmt.Errorf("unauthorized")})
+		return
+	}
 	bodyBytes, _ := io.ReadAll(r.Body)
 	defer r.Body.Close()
-	query, _ := url.ParseQuery(string(bodyBytes))
-	err := validator.Decode(&create, query)
+	query, _ = url.ParseQuery(string(bodyBytes))
+	err := validator.Decode(&params, query)
 	if err != nil {
 		WriteError(w, err)
 		return
 	}
-	
+
 }
 func (s *MyApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	switch r.URL.Path {
 	case "/user/profile":
-		s.handleprofile(w, r) 
+	s.handleprofile(w, r)
 	case "/user/create":
-		s.handlecreate(w, r) 
+	s.handlecreate(w, r)
 	default:
 		WriteError(w, ApiError{HTTPStatus: http.StatusNotFound, Err: fmt.Errorf("unknown method")})
 	}
@@ -88,7 +107,7 @@ func (s *OtherApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	switch r.URL.Path {
 	case "/user/create":
-		s.handlecreate(w, r) 
+	s.handlecreate(w, r)
 	default:
 		WriteError(w, ApiError{HTTPStatus: http.StatusNotFound, Err: fmt.Errorf("unknown method")})
 	}

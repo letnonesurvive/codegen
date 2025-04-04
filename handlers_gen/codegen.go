@@ -17,28 +17,6 @@ type ApiGen struct {
 	Method string `json:"method"`
 }
 
-// func findAllStructs(node *ast.File) map[string]struct{} {
-// 	res := make(map[string]struct{})
-// 	for _, decl := range node.Decls {
-// 		g, ok := decl.(*ast.GenDecl)
-// 		if !ok {
-// 			continue
-// 		}
-// 		for _, spec := range g.Specs {
-// 			currType, ok := spec.(*ast.TypeSpec) // iterate over all types
-// 			if !ok {
-// 				continue
-// 			}
-// 			_, ok = currType.Type.(*ast.StructType)
-// 			if !ok {
-// 				continue
-// 			}
-// 			res[currType.Name.Name] = struct{}{}
-// 		}
-// 	}
-// 	return res
-// }
-
 func findAllMethods(tree *ast.File) map[string][]ApiGen {
 	res := make(map[string][]ApiGen)
 	for _, decl := range tree.Decls {
@@ -93,41 +71,69 @@ func toCamel(s string) string {
 	return strings.Join(res, "")
 }
 
-func generateHTTPHandlers(methods map[string][]ApiGen, out *os.File) map[string]string {
+type tpl struct {
+	MethodName string
+}
 
-	type tpl struct {
-		MethodName string
-	}
-
-	paramsTemplate := template.Must(template.New("paramsTemplate").Funcs(template.FuncMap{
-		"camel": toCamel,
-	}).Parse(`
-	var validator ApiValidator
-	var {{.MethodName}} {{.MethodName | camel}}Params
-	bodyBytes, _ := io.ReadAll(r.Body)
-	defer r.Body.Close()
-	query, _ := url.ParseQuery(string(bodyBytes))
-	err := validator.Decode(&{{.MethodName}}, query)
+var decodeStr = `err := validator.Decode(&params, query)
 	if err != nil {
 		WriteError(w, err)
 		return
+	}`
+
+var validatorStr = `
+	bodyBytes, _ := io.ReadAll(r.Body)
+	defer r.Body.Close()
+	query, _ = url.ParseQuery(string(bodyBytes))
+	` + decodeStr
+
+var paramsTemplate = template.Must(template.New("paramsTemplate").Funcs(template.FuncMap{
+	"camel": toCamel,
+}).Parse(`
+	var params {{.MethodName | camel}}Params
+`))
+
+func processPostRequest(out *os.File, funcName string) {
+	// ошибки типа bad method и unauthorized должны браться из API?
+	fmt.Fprintln(out, `	if r.Method != http.MethodPost {
+		WriteError(w, ApiError{HTTPStatus: http.StatusNotAcceptable, Err: fmt.Errorf("bad method")})
+		return
+	}`)
+	fmt.Fprint(out, `	auth, ok := r.Header["X-Auth"]
+	if !ok || auth[0] != "100500" {
+		WriteError(w, ApiError{HTTPStatus: http.StatusForbidden, Err: fmt.Errorf("unauthorized")})
+		return
+	}`)
+	fmt.Fprintln(out, validatorStr)
+}
+
+func processGetRequest(out *os.File, funcName string) {
+	fmt.Fprintf(out, `	if r.Method == http.MethodPost {
+		bodyBytes, _ := io.ReadAll(r.Body)
+		defer r.Body.Close()
+		query, _ = url.ParseQuery(string(bodyBytes))
+	} else if r.Method == http.MethodGet {
+		query = r.URL.Query()
 	}
-	`))
+	`)
+	fmt.Fprintln(out, decodeStr)
+}
+
+func generateHTTPHandlers(methods map[string][]ApiGen, out *os.File) map[string]string {
 
 	res := make(map[string]string)
 	for structName, apis := range methods {
 		for _, api := range apis {
-			//add camel style
 			funcNames := strings.Split(api.Url, "/")
-			funcName := funcNames[2] //strings.Join(funcNames, "")
+			funcName := funcNames[2] //funcNames[2] - name of source method which we use for create httphandle
 			fmt.Fprintf(out, "func (s %v) handle%v (w http.ResponseWriter, r *http.Request) { \n", structName, funcName)
+			paramsTemplate.Execute(out, tpl{funcName})
+			fmt.Fprintf(out, "\tvar validator ApiValidator\n\tvar query url.Values\n")
 			if api.Method == "POST" {
-				fmt.Fprint(out, `	if r.Method != http.MethodPost {
-		WriteError(w, ApiError{HTTPStatus: http.StatusNotAcceptable, Err: fmt.Errorf("bad method")})
-		return
-	}`)
+				processPostRequest(out, funcName)
+			} else {
+				processGetRequest(out, funcName)
 			}
-			paramsTemplate.Execute(out, tpl{funcName}) // funcNames[2] - name of source method which we use for create httphandle
 			fmt.Fprintln(out, "\n}")
 			res[api.Url] = fmt.Sprintf("handle%v", funcName)
 		}
@@ -137,15 +143,22 @@ func generateHTTPHandlers(methods map[string][]ApiGen, out *os.File) map[string]
 
 func generateServeHTTP(methods map[string][]ApiGen, handlers map[string]string, out *os.File) {
 
+	type tpl struct {
+		Url        string
+		MethodName string
+	}
+	var template = template.Must(template.New("paramsTemplate").Parse(`	case "{{.Url}}":
+	s.{{.MethodName}}(w, r)
+`))
+
 	for structName, apis := range methods {
 		structArgumentName := "s"
-		// это нужно написать шаблонами? см codegen.go
+
 		fmt.Fprintf(out, "func (%v *%v) ServeHTTP(w http.ResponseWriter, r *http.Request) {\n\n", structArgumentName, structName)
 		fmt.Fprintln(out, "\tw.Header().Set(\"Content-Type\", \"application/json\")")
 		fmt.Fprintln(out, "\tswitch r.URL.Path {")
 		for _, api := range apis {
-			fmt.Fprintf(out, "\tcase \"%v\":\n", api.Url)
-			fmt.Fprintf(out, "\t\t%v.%v(w, r) \n", structArgumentName, handlers[api.Url])
+			template.Execute(out, tpl{api.Url, handlers[api.Url]})
 		}
 		fmt.Fprintln(out, "\tdefault:\n\t\tWriteError(w, ApiError{HTTPStatus: http.StatusNotFound, Err: fmt.Errorf(\"unknown method\")})")
 		fmt.Fprintln(out, "\t}\n}")

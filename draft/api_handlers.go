@@ -176,21 +176,18 @@ func WriteError(w http.ResponseWriter, err error) {
 func (m *MyApi) handleProfile(w http.ResponseWriter, r *http.Request) {
 	var params ProfileParams
 	var validator ApiValidator
+	var query url.Values
 	if r.Method == http.MethodPost {
 		bodyBytes, _ := io.ReadAll(r.Body)
 		defer r.Body.Close()
-		query, _ := url.ParseQuery(string(bodyBytes))
-		err := validator.Decode(&params, query)
-		if err != nil {
-			WriteError(w, err)
-			return
-		}
+		query, _ = url.ParseQuery(string(bodyBytes))
 	} else if r.Method == http.MethodGet {
-		err := validator.Decode(&params, r.URL.Query())
-		if err != nil {
-			WriteError(w, err)
-			return
-		}
+		query = r.URL.Query()
+	}
+	err := validator.Decode(&params, query)
+	if err != nil {
+		WriteError(w, err)
+		return
 	}
 
 	user, err := m.Profile(r.Context(), params)
@@ -222,13 +219,12 @@ func (m *MyApi) handleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var params CreateParams
+	var validator ApiValidator
 
 	bodyBytes, _ := io.ReadAll(r.Body)
 	defer r.Body.Close()
 	query, _ := url.ParseQuery(string(bodyBytes))
-	var validator ApiValidator
 	err := validator.Decode(&params, query)
-
 	if err != nil {
 		WriteError(w, err)
 		return
