@@ -8,6 +8,7 @@ import (
 	"go/token"
 	"os"
 	"strings"
+	"text/template"
 )
 
 type ApiGen struct {
@@ -78,15 +79,56 @@ func findAllMethods(tree *ast.File) map[string][]ApiGen {
 	return res
 }
 
+func toCamel(s string) string {
+	words := strings.FieldsFunc(s, func(r rune) bool {
+		return r == '_' || r == ' ' || r == '-'
+	})
+
+	var res []string
+	for _, word := range words {
+		word = strings.Replace(word, string(word[0]), strings.ToUpper(string(word[0])), 1)
+		res = append(res, word)
+	}
+
+	return strings.Join(res, "")
+}
+
 func generateHTTPHandlers(methods map[string][]ApiGen, out *os.File) map[string]string {
+
+	type tpl struct {
+		MethodName string
+	}
+
+	paramsTemplate := template.Must(template.New("paramsTemplate").Funcs(template.FuncMap{
+		"camel": toCamel,
+	}).Parse(`
+	var validator ApiValidator
+	var {{.MethodName}} {{.MethodName | camel}}Params
+	bodyBytes, _ := io.ReadAll(r.Body)
+	defer r.Body.Close()
+	query, _ := url.ParseQuery(string(bodyBytes))
+	err := validator.Decode(&{{.MethodName}}, query)
+	if err != nil {
+		WriteError(w, err)
+		return
+	}
+	`))
+
 	res := make(map[string]string)
 	for structName, apis := range methods {
 		for _, api := range apis {
 			//add camel style
 			funcNames := strings.Split(api.Url, "/")
-			funcName := strings.Join(funcNames, "")
-			fmt.Fprintf(out, "func (s %v) handle%v (w http.ResponseWriter, r *http.Request) { \n\n}", structName, funcName)
-			fmt.Fprintln(out)
+			funcName := funcNames[2] //strings.Join(funcNames, "")
+			fmt.Fprintf(out, "func (s %v) handle%v (w http.ResponseWriter, r *http.Request) { \n", structName, funcName)
+			if api.Method == "POST" {
+				fmt.Fprint(out, `	if r.Method != http.MethodPost {
+		WriteError(w, ApiError{HTTPStatus: http.StatusNotAcceptable, Err: fmt.Errorf("bad method")})
+		return
+	}`)
+			}
+			paramsTemplate.Execute(out, tpl{funcName}) // funcNames[2] - name of source method which we use for create httphandle
+			fmt.Fprintln(out, "\n}")
 			res[api.Url] = fmt.Sprintf("handle%v", funcName)
 		}
 	}
@@ -94,6 +136,7 @@ func generateHTTPHandlers(methods map[string][]ApiGen, out *os.File) map[string]
 }
 
 func generateServeHTTP(methods map[string][]ApiGen, handlers map[string]string, out *os.File) {
+
 	for structName, apis := range methods {
 		structArgumentName := "s"
 		// это нужно написать шаблонами? см codegen.go
