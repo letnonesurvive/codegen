@@ -1,17 +1,17 @@
 package main
+
 import (
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"reflect"
-	"strconv"
-	"strings"
 )
+
 type ErrorResponse struct {
- 	Error string `json:"error"` 
+	Error string `json:"error"`
 }
+
 func WriteError(w http.ResponseWriter, err error) {
 	var response ErrorResponse
 	if apiError, ok := err.(ApiError); ok {
@@ -23,7 +23,7 @@ func WriteError(w http.ResponseWriter, err error) {
 	data, _ := json.Marshal(response)
 	w.Write(data)
 }
-func (s MyApi) handleprofile (w http.ResponseWriter, r *http.Request) { 
+func (s MyApi) handleprofile(w http.ResponseWriter, r *http.Request) {
 
 	var params ProfileParams
 	var validator ApiValidator
@@ -42,20 +42,21 @@ func (s MyApi) handleprofile (w http.ResponseWriter, r *http.Request) {
 	}
 
 }
-func (s MyApi) handlecreate (w http.ResponseWriter, r *http.Request) { 
+func (s MyApi) handlecreate(w http.ResponseWriter, r *http.Request) {
 
 	var params CreateParams
 	var validator ApiValidator
 	var query url.Values
 	if r.Method != http.MethodPost {
-		WriteError(w, ApiError{HTTPStatus: http.StatusNotAcceptable, Err: fmt.Errorf("bad method")})
+		WriteError(w, ApiError{HTTPStatus: 406, Err: fmt.Errorf("bad method")})
 		return
 	}
 	auth, ok := r.Header["X-Auth"]
 	if !ok || auth[0] != "100500" {
-		WriteError(w, ApiError{HTTPStatus: http.StatusForbidden, Err: fmt.Errorf("unauthorized")})
+		WriteError(w, ApiError{HTTPStatus: 403, Err: fmt.Errorf("unauthorized")})
 		return
 	}
+
 	bodyBytes, _ := io.ReadAll(r.Body)
 	defer r.Body.Close()
 	query, _ = url.ParseQuery(string(bodyBytes))
@@ -66,20 +67,21 @@ func (s MyApi) handlecreate (w http.ResponseWriter, r *http.Request) {
 	}
 
 }
-func (s OtherApi) handlecreate (w http.ResponseWriter, r *http.Request) { 
+func (s OtherApi) handlecreate(w http.ResponseWriter, r *http.Request) {
 
 	var params CreateParams
 	var validator ApiValidator
 	var query url.Values
 	if r.Method != http.MethodPost {
-		WriteError(w, ApiError{HTTPStatus: http.StatusNotAcceptable, Err: fmt.Errorf("bad method")})
+		WriteError(w, ApiError{HTTPStatus: 406, Err: fmt.Errorf("bad method")})
 		return
 	}
 	auth, ok := r.Header["X-Auth"]
 	if !ok || auth[0] != "100500" {
-		WriteError(w, ApiError{HTTPStatus: http.StatusForbidden, Err: fmt.Errorf("unauthorized")})
+		WriteError(w, ApiError{HTTPStatus: 403, Err: fmt.Errorf("unauthorized")})
 		return
 	}
+
 	bodyBytes, _ := io.ReadAll(r.Body)
 	defer r.Body.Close()
 	query, _ = url.ParseQuery(string(bodyBytes))
@@ -95,11 +97,11 @@ func (s *MyApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	switch r.URL.Path {
 	case "/user/profile":
-	s.handleprofile(w, r)
+		s.handleprofile(w, r)
 	case "/user/create":
-	s.handlecreate(w, r)
+		s.handlecreate(w, r)
 	default:
-		WriteError(w, ApiError{HTTPStatus: http.StatusNotFound, Err: fmt.Errorf("unknown method")})
+		WriteError(w, ApiError{HTTPStatus: 404, Err: fmt.Errorf("unknown method")})
 	}
 }
 func (s *OtherApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -107,9 +109,8 @@ func (s *OtherApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	switch r.URL.Path {
 	case "/user/create":
-	s.handlecreate(w, r)
+		s.handlecreate(w, r)
 	default:
-		WriteError(w, ApiError{HTTPStatus: http.StatusNotFound, Err: fmt.Errorf("unknown method")})
+		WriteError(w, ApiError{HTTPStatus: 404, Err: fmt.Errorf("unknown method")})
 	}
 }
-

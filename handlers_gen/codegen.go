@@ -6,6 +6,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"net/http"
 	"os"
 	"strings"
 	"text/template"
@@ -93,17 +94,44 @@ var paramsTemplate = template.Must(template.New("paramsTemplate").Funcs(template
 	var params {{.MethodName | camel}}Params
 `))
 
+type ApiError struct {
+	HTTPStatus int
+	Err        error
+}
+
+func (ae ApiError) Error() string {
+	return ae.Err.Error()
+}
+
+type errorTpl struct {
+	Condition string
+	Error     error
+}
+
+func formatError(err error) string {
+	if apiErr, ok := err.(ApiError); ok {
+		return fmt.Sprintf("ApiError{HTTPStatus: %d, Err: fmt.Errorf(\"%s\")}", apiErr.HTTPStatus, apiErr.Err.Error())
+	}
+	return "err"
+}
+
+var errorTemplate = template.Must(template.New("errorTemplate").Funcs(template.FuncMap{
+	"formatError": formatError,
+}).Parse(`	if {{.Condition}} {
+		WriteError(w, {{.Error | formatError}})
+		return
+}
+`))
+
 func processPostRequest(out *os.File, funcName string) {
 	// ошибки типа bad method и unauthorized должны браться из API?
-	fmt.Fprintln(out, `	if r.Method != http.MethodPost {
-		WriteError(w, ApiError{HTTPStatus: http.StatusNotAcceptable, Err: fmt.Errorf("bad method")})
-		return
-	}`)
-	fmt.Fprint(out, `	auth, ok := r.Header["X-Auth"]
-	if !ok || auth[0] != "100500" {
-		WriteError(w, ApiError{HTTPStatus: http.StatusForbidden, Err: fmt.Errorf("unauthorized")})
-		return
-	}`)
+	errorTemplate.Execute(out, errorTpl{Condition: "r.Method != http.MethodPost",
+		Error: ApiError{HTTPStatus: http.StatusNotAcceptable, Err: fmt.Errorf("bad method")}})
+
+	fmt.Fprintln(out, "auth, ok := r.Header[\"X-Auth\"]")
+
+	errorTemplate.Execute(out, errorTpl{Condition: "!ok || auth[0] != \"100500\"",
+		Error: ApiError{HTTPStatus: http.StatusForbidden, Err: fmt.Errorf("unauthorized")}})
 	fmt.Fprintln(out, validatorStr)
 }
 
@@ -134,6 +162,7 @@ func generateHTTPHandlers(methods map[string][]ApiGen, out *os.File) map[string]
 			} else {
 				processGetRequest(out, funcName)
 			}
+
 			fmt.Fprintln(out, "\n}")
 			res[api.Url] = fmt.Sprintf("handle%v", funcName)
 		}
@@ -160,7 +189,7 @@ func generateServeHTTP(methods map[string][]ApiGen, handlers map[string]string, 
 		for _, api := range apis {
 			template.Execute(out, tpl{api.Url, handlers[api.Url]})
 		}
-		fmt.Fprintln(out, "\tdefault:\n\t\tWriteError(w, ApiError{HTTPStatus: http.StatusNotFound, Err: fmt.Errorf(\"unknown method\")})")
+		fmt.Fprintf(out, "\tdefault:\n\t\t WriteError(w,%v)", formatError(ApiError{HTTPStatus: http.StatusNotFound, Err: fmt.Errorf("unknown method")}))
 		fmt.Fprintln(out, "\t}\n}")
 	}
 }
@@ -201,10 +230,9 @@ func main() {
 	//structs := findAllStructs(node)
 	methods := findAllMethods(tree)
 
-	//jsonErrorTag := strconv.Quote(`json:"error"`)
 	fmt.Fprintf(out, "type ErrorResponse struct {\n \tError string `json:\"error\"` \n}\n")
 
-	//help method to write error to body
+	//writes help method to write error to body
 	fmt.Fprintln(out, `func WriteError(w http.ResponseWriter, err error) {
 	var response ErrorResponse
 	if apiError, ok := err.(ApiError); ok {
