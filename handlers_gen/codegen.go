@@ -35,7 +35,6 @@ func findAllMethods(tree *ast.File) map[string][]ApiGen {
 
 		getTypeName := func(exp ast.Expr) string {
 			var typeName string
-			//recvType := funcDecl.Recv.List[0].Type
 			switch t := exp.(type) {
 			case *ast.Ident:
 				typeName = t.Name
@@ -46,8 +45,8 @@ func findAllMethods(tree *ast.File) map[string][]ApiGen {
 			}
 			return typeName
 		}
-		structName := getTypeName(funcDecl.Recv.List[0].Type)
 
+		structName := getTypeName(funcDecl.Recv.List[0].Type)
 		for _, comment := range funcDecl.Doc.List {
 			var apiGen ApiGen
 			if strings.HasPrefix(comment.Text, "// apigen:api") {
@@ -82,10 +81,6 @@ func toCamel(s string) string {
 	return strings.Join(res, "")
 }
 
-type tpl struct {
-	ParamsName string
-}
-
 var decodeStr = `err := validator.Decode(&params, query)
 	if err != nil {
 		WriteError(w, err)
@@ -98,10 +93,17 @@ var validatorStr = `
 	query, _ = url.ParseQuery(string(bodyBytes))
 	` + decodeStr
 
+type paramsTpl struct {
+	ParamsName string
+	StructName string
+	MethodName string
+}
+
 var paramsTemplate = template.Must(template.New("paramsTemplate").Funcs(template.FuncMap{
 	//"camel": toCamel,
 }).Parse(`
 	var params {{.ParamsName}}
+	var response {{.StructName}}{{.MethodName}}Response
 `))
 
 type ApiError struct {
@@ -141,7 +143,7 @@ type responseTpl struct {
 
 var responseTemplate = template.Must(template.New("responseTemplate").Parse("type {{.StructName}}{{.MethodName}}Response struct {\n" +
 	"    Error string `json:\"error\"`\n" +
-	"    User  {{.UserTypeName}}  `json:\"response,omitempty\"`\n" +
+	"    User  *{{.UserTypeName}}  `json:\"response,omitempty\"`\n" +
 	"}\n"))
 
 func processPostRequest(out *os.File, funcName string) {
@@ -175,7 +177,8 @@ func generateHTTPHandlers(methods map[string][]ApiGen, out *os.File) map[string]
 		for _, api := range apis {
 			responseTemplate.Execute(out, responseTpl{structName, api.MethodName, api.ReturnName})
 			fmt.Fprintf(out, "func (s %v) handle%v (w http.ResponseWriter, r *http.Request) { \n", structName, api.MethodName)
-			paramsTemplate.Execute(out, tpl{api.ParamName})
+			paramsTemplate.Execute(out, paramsTpl{api.ParamName, structName, api.MethodName})
+			//apivalidator быть не должен, должен быть метод unpack свой для каждой структуры, его также нужно генерировать.
 			fmt.Fprintf(out, "\tvar validator ApiValidator\n\tvar query url.Values\n")
 			if api.Method == "POST" {
 				processPostRequest(out, api.MethodName)
@@ -184,7 +187,11 @@ func generateHTTPHandlers(methods map[string][]ApiGen, out *os.File) map[string]
 			}
 			fmt.Fprintf(out, "\tuser, err := s.%v(r.Context(), params)\n", toCamel(api.MethodName))
 			errorTemplate.Execute(out, errorTpl{Condition: "err != nil", Error: fmt.Errorf("")})
-
+			fmt.Fprintln(out, "response.User = user")
+			fmt.Fprintln(out, "data, err := json.Marshal(response)")
+			errorTemplate.Execute(out, errorTpl{Condition: "err != nil",
+				Error: ApiError{HTTPStatus: http.StatusInternalServerError, Err: fmt.Errorf("err")}}) // недоработка вот здесь
+			fmt.Fprintln(out, "w.Write(data)")
 			fmt.Fprintln(out, "\n}")
 			res[api.Url] = fmt.Sprintf("handle%v", api.MethodName)
 		}
@@ -254,7 +261,7 @@ func main() {
 
 	fmt.Fprintf(out, "type ErrorResponse struct {\n \tError string `json:\"error\"` \n}\n")
 
-	//writes help method to write error to body
+	//writes help method to send error in body
 	fmt.Fprintln(out, `func WriteError(w http.ResponseWriter, err error) {
 	var response ErrorResponse
 	if apiError, ok := err.(ApiError); ok {
