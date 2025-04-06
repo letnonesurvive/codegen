@@ -13,9 +13,12 @@ import (
 )
 
 type ApiGen struct {
-	Url    string `json:"url"`
-	Auth   bool   `json:"auth"`
-	Method string `json:"method"`
+	MethodName string
+	ParamName  string
+	ReturnName string
+	Url        string `json:"url"`
+	Auth       bool   `json:"auth"`
+	Method     string `json:"method"`
 }
 
 func findAllMethods(tree *ast.File) map[string][]ApiGen {
@@ -30,16 +33,20 @@ func findAllMethods(tree *ast.File) map[string][]ApiGen {
 			continue
 		}
 
-		var typeName string
-		recvType := funcDecl.Recv.List[0].Type
-		switch t := recvType.(type) {
-		case *ast.Ident:
-			typeName = t.Name
-		case *ast.StarExpr:
-			if ident, ok := t.X.(*ast.Ident); ok {
-				typeName = ident.Name
+		getTypeName := func(exp ast.Expr) string {
+			var typeName string
+			//recvType := funcDecl.Recv.List[0].Type
+			switch t := exp.(type) {
+			case *ast.Ident:
+				typeName = t.Name
+			case *ast.StarExpr:
+				if ident, ok := t.X.(*ast.Ident); ok {
+					typeName = ident.Name
+				}
 			}
+			return typeName
 		}
+		structName := getTypeName(funcDecl.Recv.List[0].Type)
 
 		for _, comment := range funcDecl.Doc.List {
 			var apiGen ApiGen
@@ -51,8 +58,11 @@ func findAllMethods(tree *ast.File) map[string][]ApiGen {
 					fmt.Println(err)
 				}
 			}
-			methods := res[typeName]
-			res[typeName] = append(methods, apiGen)
+			apiGen.MethodName = funcDecl.Name.Name
+			apiGen.ParamName = getTypeName(funcDecl.Type.Params.List[1].Type)
+			apiGen.ReturnName = getTypeName(funcDecl.Type.Results.List[0].Type)
+			methods := res[structName]
+			res[structName] = append(methods, apiGen)
 		}
 	}
 	return res
@@ -73,7 +83,7 @@ func toCamel(s string) string {
 }
 
 type tpl struct {
-	MethodName string
+	ParamsName string
 }
 
 var decodeStr = `err := validator.Decode(&params, query)
@@ -89,9 +99,9 @@ var validatorStr = `
 	` + decodeStr
 
 var paramsTemplate = template.Must(template.New("paramsTemplate").Funcs(template.FuncMap{
-	"camel": toCamel,
+	//"camel": toCamel,
 }).Parse(`
-	var params {{.MethodName | camel}}Params
+	var params {{.ParamsName}}
 `))
 
 type ApiError struct {
@@ -123,6 +133,17 @@ var errorTemplate = template.Must(template.New("errorTemplate").Funcs(template.F
 }
 `))
 
+type responseTpl struct {
+	StructName   string
+	MethodName   string
+	UserTypeName string
+}
+
+var responseTemplate = template.Must(template.New("responseTemplate").Parse("type {{.StructName}}{{.MethodName}}Response struct {\n" +
+	"    Error string `json:\"error\"`\n" +
+	"    User  {{.UserTypeName}}  `json:\"response,omitempty\"`\n" +
+	"}\n"))
+
 func processPostRequest(out *os.File, funcName string) {
 	// ошибки типа bad method и unauthorized должны браться из API?
 	errorTemplate.Execute(out, errorTpl{Condition: "r.Method != http.MethodPost",
@@ -152,19 +173,20 @@ func generateHTTPHandlers(methods map[string][]ApiGen, out *os.File) map[string]
 	res := make(map[string]string)
 	for structName, apis := range methods {
 		for _, api := range apis {
-			funcNames := strings.Split(api.Url, "/")
-			funcName := funcNames[2] //funcNames[2] - name of source method which we use for create httphandle
-			fmt.Fprintf(out, "func (s %v) handle%v (w http.ResponseWriter, r *http.Request) { \n", structName, funcName)
-			paramsTemplate.Execute(out, tpl{funcName})
+			responseTemplate.Execute(out, responseTpl{structName, api.MethodName, api.ReturnName})
+			fmt.Fprintf(out, "func (s %v) handle%v (w http.ResponseWriter, r *http.Request) { \n", structName, api.MethodName)
+			paramsTemplate.Execute(out, tpl{api.ParamName})
 			fmt.Fprintf(out, "\tvar validator ApiValidator\n\tvar query url.Values\n")
 			if api.Method == "POST" {
-				processPostRequest(out, funcName)
+				processPostRequest(out, api.MethodName)
 			} else {
-				processGetRequest(out, funcName)
+				processGetRequest(out, api.MethodName)
 			}
+			fmt.Fprintf(out, "\tuser, err := s.%v(r.Context(), params)\n", toCamel(api.MethodName))
+			errorTemplate.Execute(out, errorTpl{Condition: "err != nil", Error: fmt.Errorf("")})
 
 			fmt.Fprintln(out, "\n}")
-			res[api.Url] = fmt.Sprintf("handle%v", funcName)
+			res[api.Url] = fmt.Sprintf("handle%v", api.MethodName)
 		}
 	}
 	return res

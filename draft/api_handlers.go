@@ -150,18 +150,18 @@ func (a ApiValidator) Decode(s interface{}, query url.Values) error {
 	return nil
 }
 
-type ProfileResponse struct {
+type MyApiProfileResponse struct {
 	Error string `json:"error"`
 	User  *User  `json:"response,omitempty"`
 }
 
-type CreateResponse struct {
+type MyApiCreateResponse struct {
 	Error string   `json:"error"`
 	User  *NewUser `json:"response,omitempty"`
 }
 
 func WriteError(w http.ResponseWriter, err error) {
-	var response ProfileResponse
+	var response ApiProfileResponse
 	if apiError, ok := err.(ApiError); ok {
 		w.WriteHeader(apiError.HTTPStatus)
 	} else {
@@ -196,7 +196,7 @@ func (m *MyApi) handleProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var response ProfileResponse
+	var response ApiProfileResponse
 	response.User = user
 	data, err := json.Marshal(response)
 	if err != nil {
@@ -236,7 +236,7 @@ func (m *MyApi) handleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var response CreateResponse
+	var response ApiCreateResponse
 	response.User = user
 	data, _ := json.Marshal(response)
 	w.Write(data)
