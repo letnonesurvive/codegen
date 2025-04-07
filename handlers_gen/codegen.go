@@ -1,6 +1,7 @@
 package main
 
 import (
+	. "codegenhw/api_error"
 	"encoding/json"
 	"fmt"
 	"go/ast"
@@ -105,15 +106,6 @@ var paramsTemplate = template.Must(template.New("paramsTemplate").Funcs(template
 	var params {{.ParamsName}}
 	var response {{.StructName}}{{.MethodName}}Response
 `))
-
-type ApiError struct {
-	HTTPStatus int
-	Err        error
-}
-
-func (ae ApiError) Error() string {
-	return ae.Err.Error()
-}
 
 type errorTpl struct {
 	Condition string
@@ -247,13 +239,11 @@ func main() {
 	fmt.Fprintln(out, "package "+tree.Name.Name)
 	fmt.Fprintln(out, "import (")
 	fmt.Fprintln(out, "\t\"encoding/json\"")
+	fmt.Fprintln(out, ". \"codegenhw/api_error\"")
 	fmt.Fprintln(out, "\t\"fmt\"")
 	fmt.Fprintln(out, "\t\"io\"")
 	fmt.Fprintln(out, "\t\"net/http\"")
 	fmt.Fprintln(out, "\t\"net/url\"")
-	fmt.Fprintln(out, "\t\"reflect\"")
-	fmt.Fprintln(out, "\t\"strconv\"")
-	fmt.Fprintln(out, "\t\"strings\"")
 	fmt.Fprintln(out, ")")
 
 	//structs := findAllStructs(node)

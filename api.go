@@ -1,6 +1,8 @@
 package main
 
 import (
+	"codegenhw/api_error"
+	. "codegenhw/api_error"
 	"context"
 	"fmt"
 	"net/http"
@@ -10,19 +12,6 @@ import (
 // тест что нужны только структуры
 type SomeInterface interface {
 }
-
-// вы можете использовать ApiError в коде, который получается в результате генерации
-// считаем что это какая-то общеизвестная структура
-type ApiError struct {
-	HTTPStatus int
-	Err        error
-}
-
-func (ae ApiError) Error() string {
-	return ae.Err.Error()
-}
-
-// ----------------
 
 const (
 	statusUser      = 0
@@ -90,7 +79,7 @@ func (srv *MyApi) Profile(ctx context.Context, in ProfileParams) (*User, error) 
 	user, exist := srv.users[in.Login]
 	srv.mu.RUnlock()
 	if !exist {
-		return nil, ApiError{http.StatusNotFound, fmt.Errorf("user not exist")}
+		return nil, api_error.ApiError{http.StatusNotFound, fmt.Errorf("user not exist")}
 	}
 
 	return user, nil
