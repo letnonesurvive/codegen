@@ -68,8 +68,3 @@ func (h *SomeStructName ) wrapperDoSomeJob() {
 * `node.Decls` -> `ast.FuncDecl` - это методы. У проверяем что есть метка и начать генерировать для него обёртку
 * `node.Decls` -> `ast.GenDecl` -> `spec.(*ast.TypeSpec)` + `currType.Type.(*ast.StructType)` - это структура. Она нужна чтобы по ней генерить валидацию для метода, который мы нашли в проедыдущем пункте
 * https://golang.org/pkg/go/ast/#FuncDecl - тут смотрите к какой структуре относится метод
-
-go build handlers_gen/* && ./codegen.exe api.go api_handlers.go
-# запуск тестов
-go test -v
-```
